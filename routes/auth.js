@@ -35,24 +35,26 @@ const loginValidation = [
 ];
 
 // Register a user
-router.post('/register', registerValidation, async (req, res) => {
+router.post('/register', async (req, res) => {
   try {
-    // Check for validation errors
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
+    const { email, password, name } = req.body;
+
+    // Validate input
+    if (!email || !password) {
       return res.status(400).json({ 
-        message: 'Validation error', 
-        errors: errors.array() 
+        status: "error", 
+        message: 'Please enter all required fields' 
       });
     }
-
-    const { email, password, name } = req.body;
 
     // Check if user already exists
     const [existingUsers] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
     
     if (existingUsers.length > 0) {
-      return res.status(400).json({ message: 'User already exists' });
+      return res.status(400).json({ 
+        status: "error", 
+        message: 'User already exists' 
+      });
     }
 
     // Hash password
@@ -63,6 +65,12 @@ router.post('/register', registerValidation, async (req, res) => {
     const [result] = await db.query(
       'INSERT INTO users (email, password, name) VALUES (?, ?, ?)',
       [email, hashedPassword, name || null]
+    );
+
+    // Get the created user
+    const [newUser] = await db.query(
+      'SELECT id, email, name FROM users WHERE id = ?', 
+      [result.insertId]
     );
 
     // Create JWT payload
@@ -76,49 +84,50 @@ router.post('/register', registerValidation, async (req, res) => {
     jwt.sign(
       payload,
       process.env.JWT_SECRET,
-      { expiresIn: '24h' }, // Default expiration time of 24 hours
+      { expiresIn: '24h' },
       (err, token) => {
         if (err) throw err;
         res.status(201).json({ 
+          status: "success",
           message: 'User registered successfully',
-          token 
+          data: {
+            user: newUser[0],
+            token
+          }
         });
       }
     );
   } catch (error) {
     console.error('Error registering user:', error);
-    
-    // Handle specific database errors
-    if (error.code === 'ER_DUP_ENTRY') {
-      return res.status(400).json({ message: 'Email already in use' });
-    }
-    
     res.status(500).json({ 
-      message: 'Server error occurred during registration',
-      error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
+      status: "error", 
+      message: 'Server error', 
+      error: error.message 
     });
   }
 });
 
 // Login a user
-router.post('/login', loginValidation, async (req, res) => {
+router.post('/login', async (req, res) => {
   try {
-    // Check for validation errors
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
+    const { email, password } = req.body;
+
+    // Validate input
+    if (!email || !password) {
       return res.status(400).json({ 
-        message: 'Validation error', 
-        errors: errors.array() 
+        status: "error", 
+        message: 'Please enter all required fields' 
       });
     }
-
-    const { email, password } = req.body;
 
     // Check if user exists
     const [users] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
     
     if (users.length === 0) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(400).json({ 
+        status: "error", 
+        message: 'Invalid credentials' 
+      });
     }
 
     const user = users[0];
@@ -127,8 +136,18 @@ router.post('/login', loginValidation, async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     
     if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(400).json({ 
+        status: "error", 
+        message: 'Invalid credentials' 
+      });
     }
+
+    // Create user object without password
+    const userData = {
+      id: user.id,
+      email: user.email,
+      name: user.name
+    };
 
     // Create JWT payload
     const payload = {
@@ -141,17 +160,25 @@ router.post('/login', loginValidation, async (req, res) => {
     jwt.sign(
       payload,
       process.env.JWT_SECRET,
-      { expiresIn: '24h' }, // Default expiration time of 24 hours
+      { expiresIn: '24h' },
       (err, token) => {
         if (err) throw err;
-        res.json({ token });
+        res.json({ 
+          status: "success",
+          message: "Login successful",
+          data: {
+            user: userData,
+            token
+          }
+        });
       }
     );
   } catch (error) {
     console.error('Error logging in:', error);
     res.status(500).json({ 
-      message: 'Server error occurred during login',
-      error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
+      status: "error", 
+      message: 'Server error', 
+      error: error.message 
     });
   }
 });
@@ -162,15 +189,25 @@ router.get('/profile', auth, async (req, res) => {
     const [users] = await db.query('SELECT id, email, name, created_at FROM users WHERE id = ?', [req.user.id]);
     
     if (users.length === 0) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ 
+        status: "error", 
+        message: 'User not found' 
+      });
     }
 
-    res.json(users[0]);
+    res.json({
+      status: "success",
+      message: "Profile retrieved successfully",
+      data: {
+        user: users[0]
+      }
+    });
   } catch (error) {
     console.error('Error fetching profile:', error);
     res.status(500).json({ 
-      message: 'Server error occurred while fetching profile',
-      error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
+      status: "error", 
+      message: 'Server error', 
+      error: error.message 
     });
   }
 });

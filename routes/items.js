@@ -32,17 +32,37 @@ router.get('/', async (req, res) => {
       [req.user.id, limit, offset]
     );
     
+    // Format the items to match the requested structure
+    const formattedItems = items.map(item => ({
+      id: item.id,
+      title: item.title,
+      description: item.description,
+      status: item.status,
+      createdAt: item.created_at
+    }));
+    
     // Return paginated response with metadata
     res.json({
-      items,
-      total,
-      page,
-      totalPages,
-      limit
+      status: "success",
+      message: "Todo items retrieved successfully",
+      data: formattedItems,
+      pagination: {
+        total,
+        page,
+        totalPages,
+        limit
+      }
     });
   } catch (error) {
     console.error('Error fetching todos:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ 
+      status: "error", 
+      message: "Something went wrong",
+      error: {
+        code: 500,
+        details: "Error fetching todo items: " + error.message
+      }
+    });
   }
 });
 
@@ -52,13 +72,40 @@ router.get('/:id', async (req, res) => {
     const [rows] = await db.query('SELECT * FROM todos WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
     
     if (rows.length === 0) {
-      return res.status(404).json({ message: 'Todo not found' });
+      return res.status(404).json({ 
+        status: "error",
+        message: "Resource not found",
+        error: {
+          code: 404,
+          details: "Todo item not found"
+        }
+      });
     }
     
-    res.json(rows[0]);
+    // Format the response
+    const todo = {
+      id: rows[0].id,
+      title: rows[0].title,
+      description: rows[0].description,
+      status: rows[0].status,
+      createdAt: rows[0].created_at
+    };
+    
+    res.json({
+      status: "success",
+      message: "Todo item retrieved successfully",
+      data: todo
+    });
   } catch (error) {
     console.error('Error fetching todo:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ 
+      status: "error", 
+      message: "Something went wrong",
+      error: {
+        code: 500,
+        details: "Error fetching todo item: " + error.message
+      }
+    });
   }
 });
 
@@ -68,7 +115,14 @@ router.post('/', async (req, res) => {
     const { title, description, status } = req.body;
     
     if (!title) {
-      return res.status(400).json({ message: 'Title is required' });
+      return res.status(400).json({ 
+        status: "error",
+        message: "Validation failed",
+        error: {
+          code: 400,
+          details: "Title is required"
+        }
+      });
     }
     
     const [result] = await db.query(
@@ -79,12 +133,27 @@ router.post('/', async (req, res) => {
     const [newTodo] = await db.query('SELECT * FROM todos WHERE id = ?', [result.insertId]);
     
     res.status(201).json({
-      message: 'Todo created successfully',
-      todo: newTodo[0]
+      status: "success",
+      message: "Todo item created successfully",
+      data: {
+        id: newTodo[0].id,
+        title: newTodo[0].title,
+        description: newTodo[0].description,
+        status: newTodo[0].status,
+        createdAt: newTodo[0].created_at,
+        userId: newTodo[0].user_id
+      }
     });
   } catch (error) {
     console.error('Error creating todo:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ 
+      status: "error", 
+      message: "Something went wrong",
+      error: {
+        code: 500,
+        details: "Error creating todo item: " + error.message
+      }
+    });
   }
 });
 
@@ -98,7 +167,14 @@ router.put('/:id', async (req, res) => {
     const [existingTodo] = await db.query('SELECT * FROM todos WHERE id = ? AND user_id = ?', [todoId, req.user.id]);
     
     if (existingTodo.length === 0) {
-      return res.status(404).json({ message: 'Todo not found' });
+      return res.status(404).json({ 
+        status: "error",
+        message: "Resource not found",
+        error: {
+          code: 404,
+          details: "Todo item not found"
+        }
+      });
     }
     
     // Update the todo
@@ -116,13 +192,31 @@ router.put('/:id', async (req, res) => {
     // Get the updated todo
     const [updatedTodo] = await db.query('SELECT * FROM todos WHERE id = ?', [todoId]);
     
+    // Format the response
+    const todo = {
+      id: updatedTodo[0].id,
+      title: updatedTodo[0].title,
+      description: updatedTodo[0].description,
+      status: updatedTodo[0].status,
+      createdAt: updatedTodo[0].created_at,
+      updatedAt: updatedTodo[0].updated_at
+    };
+    
     res.json({
-      message: 'Todo updated successfully',
-      todo: updatedTodo[0]
+      status: "success",
+      message: "Todo item updated successfully",
+      data: todo
     });
   } catch (error) {
     console.error('Error updating todo:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ 
+      status: "error", 
+      message: "Something went wrong",
+      error: {
+        code: 500,
+        details: "Error updating todo item: " + error.message
+      }
+    });
   }
 });
 
@@ -135,19 +229,36 @@ router.delete('/:id', async (req, res) => {
     const [existingTodo] = await db.query('SELECT * FROM todos WHERE id = ? AND user_id = ?', [todoId, req.user.id]);
     
     if (existingTodo.length === 0) {
-      return res.status(404).json({ message: 'Todo not found' });
+      return res.status(404).json({ 
+        status: "error",
+        message: "Resource not found",
+        error: {
+          code: 404,
+          details: "Todo item not found"
+        }
+      });
     }
     
     // Delete the todo
     await db.query('DELETE FROM todos WHERE id = ? AND user_id = ?', [todoId, req.user.id]);
     
     res.json({
-      message: 'Todo deleted successfully',
-      id: todoId
+      status: "success",
+      message: "Todo item deleted successfully",
+      data: {
+        id: todoId
+      }
     });
   } catch (error) {
     console.error('Error deleting todo:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ 
+      status: "error", 
+      message: "Something went wrong",
+      error: {
+        code: 500,
+        details: "Error deleting todo item: " + error.message
+      }
+    });
   }
 });
 
