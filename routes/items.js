@@ -6,18 +6,47 @@ const auth = require('../middleware/auth');
 // Apply auth middleware to all routes
 router.use(auth);
 
-// GET all items for the logged-in user
+// GET all items for the logged-in user with pagination
 router.get('/', async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM todos WHERE user_id = ?', [req.user.id]);
-    res.json(rows);
+    // Get pagination parameters from query string
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    
+    // Calculate offset
+    const offset = (page - 1) * limit;
+    
+    // Get total count of items for the user
+    const [countResult] = await db.query(
+      'SELECT COUNT(*) as total FROM todos WHERE user_id = ?', 
+      [req.user.id]
+    );
+    const total = countResult[0].total;
+    
+    // Calculate total pages
+    const totalPages = Math.ceil(total / limit);
+    
+    // Get paginated items
+    const [items] = await db.query(
+      'SELECT * FROM todos WHERE user_id = ? LIMIT ? OFFSET ?',
+      [req.user.id, limit, offset]
+    );
+    
+    // Return paginated response with metadata
+    res.json({
+      items,
+      total,
+      page,
+      totalPages,
+      limit
+    });
   } catch (error) {
     console.error('Error fetching todos:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
-// GET a specific item by ID (only if it belongs to the user)
+// GET a specific item by ID
 router.get('/:id', async (req, res) => {
   try {
     const [rows] = await db.query('SELECT * FROM todos WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
@@ -33,7 +62,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST a new item (associated with the logged-in user)
+// POST a new item
 router.post('/', async (req, res) => {
   try {
     const { title, description, status } = req.body;
@@ -59,7 +88,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT (update) an item (only if it belongs to the user)
+// PUT (update) an item
 router.put('/:id', async (req, res) => {
   try {
     const { title, description, status } = req.body;
@@ -97,7 +126,7 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE an item (only if it belongs to the user)
+// DELETE an item
 router.delete('/:id', async (req, res) => {
   try {
     const todoId = req.params.id;
