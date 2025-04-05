@@ -3,6 +3,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const itemRoutes = require('./routes/items');
 const authRoutes = require('./routes/auth');
+const errorHandler = require('./middleware/errorHandler');
 const db = require('./config/database');
 
 // Load environment variables
@@ -25,6 +26,17 @@ app.use('/auth', authRoutes);
 app.get('/', (req, res) => {
   res.json({ message: 'Welcome to Todo List API' });
 });
+
+// 404 handler for undefined routes
+app.use((req, res, next) => {
+  res.status(404).json({
+    message: 'Resource not found',
+    error: `Cannot ${req.method} ${req.originalUrl}`
+  });
+});
+
+// Global error handler
+app.use(errorHandler);
 
 // Start server
 app.listen(PORT, () => {
